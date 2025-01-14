@@ -1,6 +1,7 @@
 import chromadb
 from transformers import AutoTokenizer, AutoModel
 import torch
+import requests
 
 class VectorStoreManager:
     def __init__(self):
@@ -42,26 +43,33 @@ class EmbeddingGenerator:
 
 
 if __name__ == "__main__":
-                # TEST CODE
-    vector_store = VectorStoreManager()
-    embed_gen = EmbeddingGenerator()
+    #             # TEST CODE
+    # vector_store = VectorStoreManager()
+    # embed_gen = EmbeddingGenerator()
 
-    documents = [
-        "Computer Science, B.S.(Abington): This program is designed to prepare students for employment as computer scientists in engineering, scientific, industrial, and business environments as software developers, programmers, and systems analysts.",
-        "Data Sciences, B.S. (Abington):Data Sciences is a field of study concerned with developing, applying, and validating methods, processes, systems, and tools for drawing useful knowledge, justifiable conclusions, and actionable insights from large, complex and diverse data through exploration, prediction, and inference."
-    ]
+    # documents = [
+    #     "Computer Science, B.S.(Abington): This program is designed to prepare students for employment as computer scientists in engineering, scientific, industrial, and business environments as software developers, programmers, and systems analysts.",
+    #     "Data Sciences, B.S. (Abington):Data Sciences is a field of study concerned with developing, applying, and validating methods, processes, systems, and tools for drawing useful knowledge, justifiable conclusions, and actionable insights from large, complex and diverse data through exploration, prediction, and inference."
+    # ]
 
-    metadata = [{"source": "psu_abington", "major_id": "CMPSC"}, {"source": "psu_abington", "major_id": "DTSAB"}]
+    # metadata = [{"source": "psu_abington", "major_id": "CMPSC"}, {"source": "psu_abington", "major_id": "DTSAB"}]
 
-    for i, doc in enumerate(documents):
-        embedding = embed_gen.generate_embedding(doc)
-        vector_store.add_vector(embedding, doc, metadata[i], f"doc_{i}")
+    # for i, doc in enumerate(documents):
+    #     embedding = embed_gen.generate_embedding(doc)
+    #     vector_store.add_vector(embedding, doc, metadata[i], f"doc_{i}")
 
-    query_text = "analytics"
-    query_embedding = embed_gen.generate_embedding(query_text)
+    # query_text = "analytics"
+    # query_embedding = embed_gen.generate_embedding(query_text)
 
-    results = vector_store.query_vectors(query_embedding=query_embedding, n_results=1)
+    # results = vector_store.query_vectors(query_embedding=query_embedding, n_results=1)
 
-    print("Query Results:")
-    for result in results["documents"]:
-        print(result)
+    # print("Query Results:")
+    # for result in results["documents"]:
+    #     print(result)
+
+
+    # Load data
+    df = pd.read_csv("psu_courses.csv")
+
+    # Combicombinene relevant fields into a single text field for embedding
+    df['text'] = df.apply(lambda row: f"{row['Course Number']} {row['Course Name']} {row['Description']} {row['Prerequisites']}", axis=1)
