@@ -18,6 +18,8 @@ faiss-cpu = "^1.9.0"
 elasticsearch = "^8.16.0"
 django-haystack = "^3.3.0"
 openai = "^1.54.4"
+regex = "^2024.11.6"
+bs4 = "^0.0.2"
 
 
 [build-system]
