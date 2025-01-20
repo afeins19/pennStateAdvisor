@@ -17,6 +17,8 @@ def extract_content(soup) -> str:
     text = content.get_text(separator='\n', strip=True)
     return text
 
+
+
 def clean_text(text) -> str:
     text = re.sub(r'\s+', ' ', text)                    #  whitespace
     text = re.sub(r'[^A-Za-z0-9.,;:?!\s]', '', text)    #  unwanted characters

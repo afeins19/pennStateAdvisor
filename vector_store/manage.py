@@ -1,6 +1,6 @@
 
 from transformers import AutoTokenizer, AutoModel
-import torch
+
 import numpy as np
 import pandas as pd
 import csv
@@ -74,8 +74,6 @@ class EmbeddingGenerator:
         """Generate a sentence embedding"""
         inputs = self.tokenizer(text, return_tensors='pt', truncation=True, padding=True)
 
-        with torch.no_grad():
-            outputs = self.model(**inputs)
 
         # Use cls token 
         cls_embedding = outputs.last_hidden_state[:, 0, :]  # First token ([CLS])
