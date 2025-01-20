@@ -20,6 +20,7 @@ django-haystack = "^3.3.0"
 openai = "^1.54.4"
 regex = "^2024.11.6"
 bs4 = "^0.0.2"
+numpy = "^2.2.2"
 
 
 [build-system]
