@@ -7,6 +7,7 @@ import pandas as pd
 import numpy as np 
 import csv 
 import nltk
+import ast
 import string
 from nltk.corpus import stopwords as sw
 from nltk.tokenize import word_tokenize as wt
@@ -39,6 +40,10 @@ with open('psu_courses.csv', mode='r') as inf, open('processed_psu_courses.csv',
         if "description" in record:
             record["description"] = clean_txt(record["description"])
 
+        # convert string of form "['a','b','c']" -> ['a', 'b', 'c']
+        if "learning_objectives" in record:
+            record["learning_objectives"] = ast.literal_eval(record["learning_objectives"])
+            
         writer.writerow(record)
 
 
