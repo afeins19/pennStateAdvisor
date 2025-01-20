@@ -6,11 +6,45 @@
 import pandas as pd 
 import numpy as np 
 import csv 
+import nltk
+import string
+from nltk.corpus import stopwords as sw
+from nltk.tokenize import word_tokenize as wt
 
-with open('psu_courses.csv') as f:
-    reader = csv.DictReader(f)
+nltk.download('stopwords')
+nltk.download('punkt_tab')
+
+def clean_txt(txt: str) -> str:
+    stop_words = set(sw.words("english"))
+    punc_table = str.maketrans("","", string.punctuation)
+
+    txt = txt.lower()                                   # lowercase 
+    txt = txt.translate(punc_table)                     # drop punctuation 
+    words = wt(txt)                                     # tokenization
+    words = [w for w in words if w not in stop_words]   # stopword removal
+    return "".join(words)
+
+
+
+with open('psu_courses.csv', mode='r') as inf, open('processed_psu_courses.csv', mode='w') as outf:
+    reader = csv.DictReader(inf)
     field_names = reader.fieldnames
     print(field_names)
+
+    writer = csv.DictWriter(outf, fieldnames=field_names)
+    writer.writeheader()
+
+    # processing description
+    for record in reader:
+        if "description" in record:
+            record["description"] = clean_txt(record["description"])
+
+        writer.writerow(record)
+
+
+
+
+
 
 
     
