@@ -1,75 +1,100 @@
-import chromadb
+
 from transformers import AutoTokenizer, AutoModel
 import torch
-import requests
+import numpy as np
+import pandas as pd
+import csv
+
+package__import__('pysqlite3')
+import sys
+sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
+
+import chromadb
 
 class VectorStoreManager:
     def __init__(self):
-        self.client = chromadb.Client()
-        self.collection = self.client.create_collection(name="psu_majors")
-
-    def create_collection(self, name):
-        return chromadb.create_collection(name=name)
+        """Initialize ChromaDB with persistent storage"""
+        self.client = chromadb.PersistentClient(path="./chroma_db")  # store vectors persistently
+        self.collection = self.client.get_or_create_collection(name="psu_majors")
 
     def add_vector(self, embedding, document, metadata, doc_id):
-        # metadata for a collection
+        """Add a new vector and metadata to ChromaDB"""
         self.collection.add(
-            embeddings=[embedding],
+            embeddings=[embedding.tolist()],  #  numpy to list
             documents=[document],
-            metadatas=[metadata],
+            metadatas=[metadata], 
             ids=[doc_id]
         )
 
+    def fromcsv(self, file_name: str):
+        """Read courses from CSV generate embeddings then store in ChromaDB"""
+        eg = EmbeddingGenerator()
+
+        with open(file_name, mode='r', encoding='utf-8') as f:
+            reader = csv.DictReader(f)
+
+            for row in reader:
+                if 'description' not in row or not row['description'].strip():
+                    continue  # Skip rows with missing descriptions
+
+                # make embedding from description
+                embedding = eg.generate_embedding(row['description'])
+
+                # row -> string for document storage
+                documents = str(row)
+
+                # store metadata
+                metadata = {
+                    "course_name": row.get("course_name", "N/A"),
+                    "department_url": row.get("department_url", "N/A")
+                }
+
+                # course number is ID
+                doc_id = row.get("course_number", f"course_{hash(documents)}")
+                print(f"[Vectorizing] {str(doc_id)}")
+                self.add_vector(embedding=embedding, document=documents, metadata=metadata, doc_id=doc_id)
+
+        print(f"Successfully added courses from {file_name} into ChromaDB!")
+
     def query_vectors(self, query_embedding, n_results=3):
-        # find similar vectors based on query 
-        return self.collection.query(
-            query_embeddings=[query_embedding],
+        """Find similar courses based on query embedding"""
+        results = self.collection.query(
+            query_embeddings=[query_embedding.tolist()],  # numpy to list
             n_results=n_results
         )
+        return results
 
 class EmbeddingGenerator:
     def __init__(self, model_name='sentence-transformers/all-MiniLM-L6-v2'):
+        """Load Transformer model for embeddings"""
         self.tokenizer = AutoTokenizer.from_pretrained(model_name)
         self.model = AutoModel.from_pretrained(model_name)
 
     def generate_embedding(self, text):
+        """Generate a sentence embedding"""
         inputs = self.tokenizer(text, return_tensors='pt', truncation=True, padding=True)
+
         with torch.no_grad():
             outputs = self.model(**inputs)
-        
-        # pool hidden states to create embeddings 
-        embedding = outputs.last_hidden_state.mean(dim=1).squeeze().numpy()
-        return embedding
 
+        # Use cls token 
+        cls_embedding = outputs.last_hidden_state[:, 0, :]  # First token ([CLS])
+        return cls_embedding.squeeze().numpy()  # to numpy
 
 if __name__ == "__main__":
-    #             # TEST CODE
-    # vector_store = VectorStoreManager()
-    # embed_gen = EmbeddingGenerator()
+    vector_store = VectorStoreManager()
+    embed_gen = EmbeddingGenerator()
 
-    # documents = [
-    #     "Computer Science, B.S.(Abington): This program is designed to prepare students for employment as computer scientists in engineering, scientific, industrial, and business environments as software developers, programmers, and systems analysts.",
-    #     "Data Sciences, B.S. (Abington):Data Sciences is a field of study concerned with developing, applying, and validating methods, processes, systems, and tools for drawing useful knowledge, justifiable conclusions, and actionable insights from large, complex and diverse data through exploration, prediction, and inference."
-    # ]
+    # load data from CSV and process
+    csv_file = "/workspaces/pennStateAdvisor/crawler/processed_psu_courses.csv"
+    vector_store.fromcsv(csv_file) # make into vector store
 
-    # metadata = [{"source": "psu_abington", "major_id": "CMPSC"}, {"source": "psu_abington", "major_id": "DTSAB"}]
+    # test 
+    query_text = "Machine learning basics"
+    query_embedding = embed_gen.generate_embedding(query_text)
 
-    # for i, doc in enumerate(documents):
-    #     embedding = embed_gen.generate_embedding(doc)
-    #     vector_store.add_vector(embedding, doc, metadata[i], f"doc_{i}")
+    results = vector_store.query_vectors(query_embedding=query_embedding, n_results=3)
 
-    # query_text = "analytics"
-    # query_embedding = embed_gen.generate_embedding(query_text)
-
-    # results = vector_store.query_vectors(query_embedding=query_embedding, n_results=1)
-
-    # print("Query Results:")
-    # for result in results["documents"]:
-    #     print(result)
-
-
-    # Load data
-    df = pd.read_csv("psu_courses.csv")
-
-    # Combicombinene relevant fields into a single text field for embedding
-    df['text'] = df.apply(lambda row: f"{row['Course Number']} {row['Course Name']} {row['Description']} {row['Prerequisites']}", axis=1)
+    print("\nQuery Results:")
+    for metadata in results["metadatas"]:
+        print(metadata)
