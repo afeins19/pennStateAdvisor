@@ -1,6 +1,7 @@
 import requests
 from bs4 import BeautifulSoup
 import re
+from urllib.parse import urljoin
 
 def fetch_and_parse(url):
     response = requests.get(url)
