@@ -56,8 +56,6 @@ def clean_text_for_major(major_data_dict):
     return cleaned_dict
 
 
-
-
 def get_baccalaureate_degree_links():
 	response = requests.get(BASE_URL)
 	soup = BeautifulSoup(response.content, "html.parser")
@@ -105,6 +103,7 @@ def extract_additional_courses(major_url):
     soup = BeautifulSoup(response.content, 'html.parser')
     course_list = []
 
+    needs_c_or_better = False 
     found_additional_section = False
     # find all courses in the prescribed section
     for row in soup.select(".sc_courselist tr.odd, .sc_courselist tr.even"):
@@ -160,42 +159,102 @@ def extract_additional_courses(major_url):
 
     return course_list
 
+def extract_selectable_courses(major_url):
+    """Groups courses under their 'Select n from...' headers and extracts required credits."""
+    response = requests.get(major_url)
+    soup = BeautifulSoup(response.content, 'html.parser')
 
+    course_groups = []
+    current_group = None  
 
+    for row in soup.find_all("tr"):  # Loop through table rows to capture both headers and courses
+        columns = row.find_all("td")
+
+        if len(columns) == 2:  # Selection header row (e.g., "Select one of the following")
+            header_text = columns[0].get_text(strip=True).lower()
+            required_credits = columns[1].get_text(strip=True)  # Credits in second column
+
+            if "select" in header_text:  # New selection group detected
+                if current_group:
+                    course_groups.append(current_group)  # Save the previous group
+                
+                current_group = {
+                    "selection_requirement": header_text,
+                    "required_credits": required_credits,
+                    "courses": []
+                }
+
+        elif current_group and len(columns) >= 2:  # Course row under a selection header
+            course_code = columns[0].get_text(strip=True)
+            course_name = columns[1].get_text(strip=True)
+
+            # Extract course URL if available
+            course_link = columns[0].find("a", class_="bubblelink code")
+            course_url = urljoin(BASE_URL, course_link["href"]) if course_link else "N/A"
+
+            current_group["courses"].append({
+                "course_code": course_code,
+                "course_name": course_name,
+                "course_url": course_url
+            })
+
+    # Add the last group if it's not empty (end of table)
+    if current_group:
+        course_groups.append(current_group)
+
+    return course_groups
+
+    
 def extract_course_comments(major_url):
     comments = []
     response = requests.get(major_url)
     soup = BeautifulSoup(response.content, 'html.parser')
     
-    option_div = soup.find("div", id="tg12")
-    if not option_div:
-        return []
-
+    # comments are right below <tr class="even/odd lastrow>"
+    lastrow_trs = soup.find_all("tr", class_=lambda c: c and "lastrow" in c)
+    
     comment_spans = soup.find_all("span", class_="courselistcomment")
 
     for c in comment_spans:
-        comments.append(c.get_text(strip=True))
-    
+        text = c.get_text(strip=True)
+        
+        if any(keyword in text.lower() for keyword in ["prescribed courses", "additional courses", "supporting courses", "bachelor of science", "requirements", "option"]):
+                continue  # Skip section headers
+
+        elif "select" in text.lower() and "following" not in text.lower():
+            print(f"\nCOMMENT >>> {text}")
+            comments.append(text)
+            
     return comments 
 
 def extract_credit_breakdown(major_url):
-    # breaking down degree requirments into credit types (gen ed, elective, major requirements etc)
+    """Extracts the credit breakdown (Gen Ed, Electives, Major Req, etc.) from the degree requirements section."""
     response = requests.get(major_url)
     soup = BeautifulSoup(response.content, 'html.parser')
     
-    credit_table = soup.find("table", class_="sc_courselist") 
     credit_breakdown = {}
 
-    if credit_table:
-        for row in credit_table.find_all("tr"):
+    # Find all tables, some majors list credit breakdown separately
+    credit_tables = soup.find_all("table", class_="sc_sctable tbl_programrequirements")  
+
+    for table in credit_tables:
+        for row in table.find_all("tr"):
             cols = row.find_all("td")
-            if len(cols) >= 2:
-                cat = cols[0].get_text(strip=True)
+
+            if len(cols) >= 2:  # Ensures row has at least Category & Credit columns
+                category = cols[0].get_text(strip=True)
                 credits = cols[1].get_text(strip=True)
 
-                if cat and credits:
-                    credit_breakdown[cat] = credits
-    
+                # Skip rows that don't have valid credit numbers
+                if not re.search(r"\d+", credits):  
+                    continue  
+
+                # Normalize category names to avoid inconsistencies
+                category = category.replace("\xa0", " ").strip()
+
+                # Store the credit breakdown
+                credit_breakdown[category] = credits
+
     return credit_breakdown
 
 def extract_major_options(major_url):
@@ -282,22 +341,14 @@ def generate_major_requirements(major_url):
     cleaned_prescribed_courses = list(map(clean_text_for_major, prescribed_courses))
     cleaned_additional_courses = list(map(clean_text_for_major, additional_courses))
 
-    comment = extract_course_comment(major_url)
+    comment = extract_course_comments(major_url)
 
     # get options for courses (additional specializations) 
     course_options = None 
+    selectable_courses = extract_selectable_courses(major_url)
 
-    print(f"[Getting Data] {major_title} | {major_code}\n")
-    print(">>> PRESCRIBED COURSES <<<")
-    for course in cleaned_prescribed_courses:
-        print(f"\t{course}\n")
-    
-    print(">>> ADDITIONAL COURSES <<<")
-    for course in cleaned_additional_courses:
-        print(f"\t{course}\n")
-    time.sleep(5)
-    
-    time.sleep(5)
+    print(f"\n\t[Getting Data] {major_title} | {major_code}\n")
+ 
 
 
     major_data = {
@@ -307,10 +358,18 @@ def generate_major_requirements(major_url):
         "credit_breakdown" : credit_breakdown,
         "prescribed_courses" : prescribed_courses,
         "additional_courses" : additional_courses,
-        "comment" : comment,
+        "selectable_courses" : selectable_courses,
+        "comments" : comment,
         "options" : course_options
     }
- 
+
+    for k,v in major_data.items():
+        if isinstance(v, str):
+            print(f"{k}: {v}")
+        else:
+            if v is not None:
+                print(f"{k}: {len(v)} items")
+            
     return major_data
 
 if __name__ == "__main__":
