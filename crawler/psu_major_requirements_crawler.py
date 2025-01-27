@@ -74,27 +74,29 @@ def extract_prescribed_courses(major_url):
     # find all courses in the prescribed section
     for row in soup.select(".sc_courselist tr.odd, .sc_courselist tr.even"):
         columns = row.find_all("td")
-        if len(columns) >= 2:
-            course_code = columns[0].get_text(strip=True)
-            course_name = columns[1].get_text(strip=True)
-            credits = columns[-1].get_text(strip=True)  # credits is last col
-            
-            # accounting only for prescribed courses in this function
-            if "additional" in course_code.lower():
-                break  
-            
-            # dropping header from table for prescribed c or better 
-            if "Prescribed" not in course_code:
-                course_list.append({
-                    "course_code": course_code,
-                    "course_name": course_name,
-                    "credits": credits,
-                    "needs_c_or_better" : needs_c_or_better,
-                    "course_url": major_url,
-                })
+        if len(columns) < 2:
+            break
+        
+        course_code = columns[0].get_text(strip=True)
+        course_name = columns[1].get_text(strip=True)
+        credits = columns[-1].get_text(strip=True)  # credits is last col
+        
+        # accounting only for prescribed courses in this function
+        if "additional" in course_code.lower():
+            break  
+        
+        # dropping header from table for prescribed c or better 
+        if "Prescribed" not in course_code:
+            course_list.append({
+                "course_code": course_code,
+                "course_name": course_name,
+                "credits": credits,
+                "needs_c_or_better" : needs_c_or_better,
+                "course_url": major_url,
+            })
 
-            if "c or better" in course_code.lower():
-                needs_c_or_better = True
+        if "c or better" in course_code.lower():
+            needs_c_or_better = True
 
     return course_list
 
@@ -109,54 +111,53 @@ def extract_additional_courses(major_url):
     for row in soup.select(".sc_courselist tr.odd, .sc_courselist tr.even"):
         columns = row.find_all("td")
 
-        if len(columns) >= 2:        
+        if len(columns) < 2:
+            break        
             
-            course_code = columns[0].get_text(strip=True)
-            course_name = columns[1].get_text(strip=True)
-            credits = columns[-1].get_text(strip=True)  # credits is last col
+        course_code = columns[0].get_text(strip=True)
+        course_name = columns[1].get_text(strip=True)
+        credits = columns[-1].get_text(strip=True)  # credits is last col
 
-            if "select" in course_code.lower():
-                break
+        if "select" in course_code.lower():
+            break
 
-
-            # exit conditions
-            if "requirements for" in course_code.lower():
-                break
-
-
-            if "supporting" in course_code.lower():
-                break 
-            
-    
-            if r"&" in str(course_code.lower()[:1]): 
-                course_code = str(course_code)[:1] # drop the & 
-
-            # dropping header from table for prescribed c or better 
-            if "additional" not in course_code.lower() and found_additional_section:
-                course_list.append({
-                    "course_code": course_code,
-                    "course_name": course_name,
-                    "credits": credits,
-                    "needs_c_or_better" : needs_c_or_better,
-                    "course_url": major_url,
-                    "equivalent_course" : "",
-                })
+        # exit conditions
+        if "requirements for" in course_code.lower():
+            break
 
 
-            elif "additional" in course_code.lower():
-                found_additional_section = True
+        if "supporting" in course_code.lower():
+            break 
+        
 
-            if "c or better" in course_code.lower():
-                needs_c_or_better = True
+        if r"&" in str(course_code.lower()[:1]): 
+            course_code = str(course_code)[:1] # drop the & 
 
-            # line starts with 'or' so we have to consider the prev course
-            if "orclass" in row.get("class", []):
-                or_removed = str(course_code).split("or",1)[1].strip()
-                course_list[-1]['course_code'] = or_removed # drop the or 
-                course_list[-1]['equivalent_course'] = course_list[-2]['course_code'] # make the prev course iterated over the equivalent one
-                course_list[-2]['equivalent_course'] = or_removed # make prev eq course 
+        # dropping header from table for prescribed c or better 
+        if "additional" not in course_code.lower() and found_additional_section:
+            course_list.append({
+                "course_code": course_code,
+                "course_name": course_name,
+                "credits": credits,
+                "needs_c_or_better" : needs_c_or_better,
+                "course_url": major_url,
+                "equivalent_course" : "",
+            })
+
+
+        elif "additional" in course_code.lower():
+            found_additional_section = True
+
+        if "c or better" in course_code.lower():
+            needs_c_or_better = True
+
+        # line starts with 'or' so we have to consider the prev course
+        if "orclass" in row.get("class", []):
+            or_removed = str(course_code).split("or",1)[1].strip()
+            course_list[-1]['course_code'] = or_removed # drop the or 
+            course_list[-1]['equivalent_course'] = course_list[-2]['course_code'] # make the prev course iterated over the equivalent one
+            course_list[-2]['equivalent_course'] = or_removed # make prev eq course 
                 
-
     return course_list
 
 def extract_selectable_courses(major_url):
@@ -171,6 +172,8 @@ def extract_selectable_courses(major_url):
         columns = row.find_all("td")
 
         if len(columns) == 2:  # Selection header row (e.g., "Select one of the following")
+            
+            
             header_text = columns[0].get_text(strip=True).lower()
             required_credits = columns[1].get_text(strip=True)  # Credits in second column
 
@@ -325,10 +328,11 @@ def extract_major_options(major_url):
 
 def generate_major_requirements(major_url):
     response = requests.get(major_url)
-    soup = BeautifulSoup(response.content, 'html.parser')
+    soup = BeautifulSoup(response.content, 'html.parser') # TODO make soup a parameter to be passed to all 'extract_...' functions
 
-    major_title = soup.find(class_="page-title").get_text(strip=True)
-    major_code = soup.find(id="program-code").get_text(strip=True).replace("Program Code: ", "").split("_")[0] 
+    major_title = soup.find(class_="page-title").get_text(strip=True) # Accounting, B.S. (Abington)
+    major_code = soup.find(id="program-code").get_text(strip=True)
+    major_code.replace("Program Code: ", "").split("_")[0] # ACCAB_BS -> ACCAB
     min_credit_info = soup.find(class_="areaheader courselistcomment")
 
     # breaking down degree requirments into credit types (gen ed, elective, major requirements etc)
@@ -377,3 +381,4 @@ if __name__ == "__main__":
 
 	for link in links:
 		major_data = generate_major_requirements(link)
+    
